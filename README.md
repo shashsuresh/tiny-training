@@ -9,6 +9,7 @@
 If you are interested in getting updates, please sign up [here](https://forms.gle/UW1uUmnfk1k6UJPPA) to get notified.
 
 * [03/06/2024] We release a [new demo video](https://www.youtube.com/watch?v=0pUFZYdoMY8) of [On-Device Training Under 256KB Memory](https://arxiv.org/abs/2206.15472).
+* [10/13/2023] [Tiny Machine Learning: Progress and Futures \[Feature\]](https://hanlab.mit.edu/projects/tinyml-magazine) appears at IEEE CAS Magazine.
 * [11/28/2022] Our poster session is on Wed Nov 30 11:00 am-1:00 pm (New Orleans time)@ Hall J #702. Stop by if you are interested!
 * [10/04/2022] Our paper on tiny on-device training is highlighted on the [MIT homepage](http://web.mit.edu/spotlight/learning-edge/)!
 * [09/16/2022] Our paper is accepted to NeurIPS 2022!
