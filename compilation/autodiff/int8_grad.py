@@ -71,7 +71,7 @@ def get_weight_scales(w, n_bits=8, axis=1):
     return wmax / relay.const(2 ** (n_bits - 1) - 1, dtype=dtype)
 
 
-@register_gradient("nn.mcuadd")
+#@register_gradient("nn.mcuadd")
 def mcuadd_int8_grad(orig, grad):
     # cast to 32bits for backward computation
     # new_inputs = [relay.cast(_, "float32") for _ in orig.args]
@@ -110,7 +110,7 @@ def mcuadd_int8_grad(orig, grad):
     ]
 
 
-@register_gradient("nn.mcutruncate")
+#@register_gradient("nn.mcutruncate")
 def mcutruncate_int8_grad(orig, grad):
     new_inputs = orig.args
     x = new_inputs[0]
@@ -150,7 +150,7 @@ def post_process_gradients(backward_data, backward_weight, eps=None):
     return backward_data, backward_weight
 
 
-@register_gradient("nn.mcuconv2d")
+# @register_gradient("nn.mcuconv2d")
 def mcunetconv2d_int8_grad(orig, grad):
     # x, y = orig.args
     o_data, o_weight, o_bias, o_zx, o_zy, o_scale = orig.args

@@ -1,5 +1,5 @@
 data_provider:
-  root: /home/jilin/dataset/flowers102
+  root: /home/shashwathsuresh/TUDelft/thesis/datasets/flowers102
   num_classes: 102
 
 run_config:

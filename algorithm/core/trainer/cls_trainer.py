@@ -19,7 +19,7 @@ class ClassificationTrainer(BaseTrainer):
                       desc='Validate',
                       disable=dist.rank() > 0 or configs.ray_tune) as t:
                 for images, labels in self.data_loader['val']:
-                    images, labels = images.cuda(), labels.cuda()
+                    images, labels = images, labels
                     # compute output
                     output = self.model(images)
                     loss = val_criterion(output, labels)
@@ -50,7 +50,7 @@ class ClassificationTrainer(BaseTrainer):
                   desc='Train Epoch #{}'.format(epoch + 1),
                   disable=dist.rank() > 0 or configs.ray_tune) as t:
             for _, (images, labels) in enumerate(self.data_loader['train']):
-                images, labels = images.cuda(), labels.cuda()
+                images, labels = images, labels
                 self.optimizer.zero_grad()
 
                 output = self.model(images)

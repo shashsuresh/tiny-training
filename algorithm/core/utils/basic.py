@@ -53,9 +53,9 @@ class DistributedMetric(object):
     def update(self, val: Union[torch.Tensor, int, float], delta_n=1):
         val *= delta_n
         if type(val) in [int, float]:
-            val = torch.Tensor(1).fill_(val).cuda()
+            val = torch.Tensor(1).fill_(val)
         if self.backend == 'ddp':
-            self.count += ddp_reduce_tensor(torch.Tensor(1).fill_(delta_n).cuda(), reduce='sum')
+            self.count += ddp_reduce_tensor(torch.Tensor(1).fill_(delta_n), reduce='sum')
             self.sum += ddp_reduce_tensor(val.detach(), reduce='sum')
         else:
             raise NotImplementedError
@@ -110,5 +110,5 @@ def accuracy(output: torch.Tensor, target: torch.Tensor, topk=(1,)) -> List[torc
             correct_k = correct[:k].reshape(-1).float().sum(0, keepdim=True)
             res.append(correct_k.mul_(100.0 / batch_size))
         else:
-            res.append(torch.zeros(1).cuda() - 1.)
+            res.append(torch.zeros(1) - 1.)
     return res
