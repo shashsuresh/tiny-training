@@ -180,6 +180,7 @@ class QuantizedConv2dDiff(QuantizedConv2d):
         # self.register_buffer('zero_w', to_pt(zero_w))
         self.register_buffer('zero_y', to_pt(zero_y))
         from ..core.utils.config import configs
+        #from core.utils.config import configs
         if configs.backward_config.train_scale:
             print('Note: the scale is also trained...')
             self.register_parameter('effective_scale', torch.nn.Parameter(effective_scale))

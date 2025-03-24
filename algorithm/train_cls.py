@@ -15,6 +15,7 @@ from core.dataset import build_dataset
 from core.optimizer import build_optimizer
 from core.trainer.cls_trainer import ClassificationTrainer
 from core.builder.lr_scheduler import build_lr_scheduler
+from core.utils.partial_backward import nelem_saved_for_backward
 
 # Training settings
 parser = argparse.ArgumentParser()
@@ -91,6 +92,8 @@ def main():
         prepare_model_for_backward_config(model, configs.backward_config)
         logger.info(f'Getting backward config: {configs.backward_config} \n'
                     f'Total convs {len(get_all_conv_ops(model))}')
+        logger.info(f'---------- MEMORY ANALYSIS ----------')
+        nelem_saved_for_backward(model, torch.randn(1, 3, 128, 128), configs.backward_config, logger=logger)
 
     if configs.evaluate:
         val_info_dict = trainer.validate()

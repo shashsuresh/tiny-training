@@ -135,3 +135,9 @@ dmypy.json
 runs/
 .model/
 make_flowers102.py
+make_stanford_cars.py
+mcunet-5fps_all.json
+mcunet-5fps_half.json
+mcunet-5fps.json
+mcunet-5fps_eighth.json
+mcunet-5fps_quarter.json

@@ -1,6 +1,7 @@
 import copy
 import torch
 import numpy as np
+import json
 
 activation_bits = 8
 fc_bits = 0  # 32  # do not consider fc for now
@@ -89,7 +90,7 @@ def parsed_backward_config(backward_config, model):
     return backward_config
 
 
-def nelem_saved_for_backward(model, sample_input, backward_config, verbose=True, plot=False):
+def nelem_saved_for_backward(model, sample_input, backward_config, verbose=True, plot=False, logger=None, json=False):
     """
     calculate the memory required when saving for backward
     :param model:
@@ -128,6 +129,8 @@ def nelem_saved_for_backward(model, sample_input, backward_config, verbose=True,
     momentum_size = []  # unit in bits
     activation_size = []  # unit in bits
 
+    #ops_by_layer = [] # A collection of OPs for each updated layer
+
     # firstly, let's count the usage of linear layer
     fc = model[-2]
     assert isinstance(fc, ScaledLinear), type(fc)
@@ -136,6 +139,7 @@ def nelem_saved_for_backward(model, sample_input, backward_config, verbose=True,
     if not len(fc.input_shape) == 2:
         assert len(fc.input_shape) == 4 and fc.input_shape[-1] == fc.input_shape[-2] == 1
     activation_size.append(fc.input_shape[1] * activation_bits)
+    #ops_by_layer.append(fc.in_features * fc.out_features)
 
     _zero_grad(model)
 
@@ -149,7 +153,14 @@ def nelem_saved_for_backward(model, sample_input, backward_config, verbose=True,
 
     # apply backward config to remove gradient that we did not get
     apply_backward_config(model, backward_config)
-
+    if (json):
+        model_params = {}
+        model_params['FC'] = {}
+        model_params['FC']['in_features'] = fc.in_features
+        model_params['FC']['out_features'] = fc.out_features
+        model_params['FC']['weight_count'] = fc.weight.numel()
+        model_params['FC']['bias_count'] = fc.bias.numel()
+        conv_idx = len(conv_ops)
     for conv in conv_ops:
         if conv.bias.grad is not None:  # this layer is updated
             # TODO: the mask and input might be counted twice; maybe we should fix this (or not, depends on impl.)?
@@ -157,6 +168,17 @@ def nelem_saved_for_backward(model, sample_input, backward_config, verbose=True,
             this_activation_size = np.product(conv.output_shape[1:]) * 1  # binary mask
             this_weight_size = conv.bias.numel() * bias_bits
             this_momentum_size = conv.bias.numel() * momentum_bits
+
+            ## OPs for BIAS update
+            #ops = conv.output_shape[0] * conv.output_shape[1] * conv.output_shape[2] * conv.output_shape[3]
+
+            if (json):
+                model_params['conv'+str(conv_idx)] = {}
+                model_params['conv'+str(conv_idx)]['input_shape'] = conv.input_shape
+                model_params['conv'+str(conv_idx)]['output_shape'] = conv.output_shape
+                model_params['conv'+str(conv_idx)]['groups'] = conv.groups
+                model_params['conv'+str(conv_idx)]['weight_shape'] = conv.weight.shape
+                model_params['conv'+str(conv_idx)]['bias_count'] = conv.bias.numel()
 
             if conv.weight.grad is not None:
 
@@ -167,15 +189,33 @@ def nelem_saved_for_backward(model, sample_input, backward_config, verbose=True,
                     this_activation_size += np.product(conv.input_shape[2:]) * channels * activation_bits
                     this_weight_size += (channels * weight_shape[2] * weight_shape[3]) * weight_bits
                     this_momentum_size += (channels * weight_shape[2] * weight_shape[3]) * momentum_bits
+                    if (json):
+                        model_params['conv'+str(conv_idx)]['conv_type'] = 'depthwise'
+                        model_params['conv'+str(conv_idx)]['weight_count'] = channels * weight_shape[2] * weight_shape[3]
+                        model_params['conv'+str(conv_idx)]['channels'] = channels
+                        model_params['conv'+str(conv_idx)]['total_channels'] = conv.in_channels
                 else:
                     weight_shape = conv.weight.shape  # o, i, k, k
                     if conv.groups == 1:  # normal conv
                         grad_norm = torch.norm(conv.weight.grad.data.permute(1, 0, 2, 3).reshape(weight_shape[1], -1), dim=1)
                         channels = (grad_norm > 0).sum().item()
                         weight_elem = weight_shape[0] * channels * weight_shape[2] * weight_shape[3]
+                        #ops += 2 * conv.output_shape[2] * conv.output_shape[3] * weight_shape[2] * weight_shape[3] * weight_shape[0] * conv.input_shape[1]
+                        #ops += 2 * conv.input_shape[2] * conv.input_shape[3]* weight_shape[2] * weight_shape[3] * conv.input_shape[1] *conv.output_shape[1]
+                        if (json):
+                            model_params['conv'+str(conv_idx)]['conv_type'] = 'normal'
                     else:  # group conv (lite residual)
+                        if (json):
+                            model_params['conv'+str(conv_idx)]['conv_type'] = 'group'
                         channels = conv.in_channels  # save all input channels
                         weight_elem = conv.weight.data.numel()  # update all weights
+                        #ops += 2 * conv.output_shape[2] * conv.output_shape[3] * weight_shape[2] * weight_shape[3] * weight_shape[0] * conv.output_shape[1] / conv.groups
+                        #ops += 2 * conv.input_shape[2] * conv.input_shape[3]* weight_shape[2] * weight_shape[3] * conv.input_shape[1] *conv.output_shape[1] / conv.groups
+
+                    #ops *= (channels / conv.in_channels)
+                    if (json):
+                        model_params['conv'+str(conv_idx)]['channels'] = channels
+                        model_params['conv'+str(conv_idx)]['total_channels'] = conv.in_channels
 
                     this_activation_size += np.product(conv.input_shape[2:]) * channels * activation_bits
                     this_weight_size += weight_elem * weight_bits
@@ -184,23 +224,39 @@ def nelem_saved_for_backward(model, sample_input, backward_config, verbose=True,
             weight_size.insert(0, this_weight_size)
             momentum_size.insert(0, this_momentum_size)
             activation_size.insert(0, this_activation_size)
-
+            ops_by_layer.insert(0, ops)
+        if (json):
+            conv_idx-=1
     del model
+    if (json):
+        with open('mcunet-5fps_eighth.json','w') as jf:
+            json.dump(model_params, jf)
 
     total_weight_size = sum(weight_size)
     total_momentum_size = sum(momentum_size)
     total_activation_size = sum(activation_size)
     total_usage = total_weight_size + total_momentum_size + total_activation_size
+    #print(f'Total OPs: {sum(ops_by_layer)}')
 
     if verbose:
-        print('weight', weight_size)
-        print('momentum', momentum_size)
-        print('activation', activation_size)
-        print('memory usage in kB:')
-        print('weight: {:.0f}kB, momentum: {:.0f}kB, activation: {:.0f}kB'.format(
-            total_weight_size / 1024 / 8, total_momentum_size / 1024 / 8, total_activation_size / 1024 / 8
-        ))
-        print('total: {:.0f}kB'.format(total_usage / 1024 / 8))
+        if logger is None:
+            print('weight', weight_size)
+            print('momentum', momentum_size)
+            print('activation', activation_size)
+            print('memory usage in kB:')
+            print('weight: {:.0f}kB, momentum: {:.0f}kB, activation: {:.0f}kB'.format(
+                total_weight_size / 1024 / 8, total_momentum_size / 1024 / 8, total_activation_size / 1024 / 8
+            ))
+            print('total: {:.0f}kB'.format(total_usage / 1024 / 8))
+        else:
+            logger.info(f'weight {weight_size}')
+            logger.info(f'momentum {momentum_size}')
+            logger.info(f'activation {activation_size}')
+            logger.info(f'memory usage in kB:')
+            logger.info('weight: {:.0f}kB, momentum: {:.0f}kB, activation: {:.0f}kB'.format(
+                total_weight_size / 1024 / 8, total_momentum_size / 1024 / 8, total_activation_size / 1024 / 8
+            ))
+            logger.info('total: {:.0f}kB'.format(total_usage / 1024 / 8))
 
     if plot:
         import matplotlib.pyplot as plt
