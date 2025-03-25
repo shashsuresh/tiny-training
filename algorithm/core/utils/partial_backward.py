@@ -224,7 +224,7 @@ def nelem_saved_for_backward(model, sample_input, backward_config, verbose=True,
             weight_size.insert(0, this_weight_size)
             momentum_size.insert(0, this_momentum_size)
             activation_size.insert(0, this_activation_size)
-            ops_by_layer.insert(0, ops)
+            #ops_by_layer.insert(0, ops)
         if (json):
             conv_idx-=1
     del model
