@@ -339,20 +339,18 @@ def apply_backward_config(model, backward_config):
         if train_this_conv:
             n_w_trained += 1
             if backward_config['weight_update_ratio'][ratio_ptr] is not None:
-                # apply sub channel gradient
-                if _is_depthwise_conv(conv):
-                    conv.weight.grad.data = conv.weight.grad.data * conv.keep_mask.view(-1, 1, 1, 1)
+                if backward_config['weight_update_ratio'][ratio_ptr] != 0:
+                    # apply sub channel gradient
+                    if _is_depthwise_conv(conv):
+                        conv.weight.grad.data = conv.weight.grad.data * conv.keep_mask.view(-1, 1, 1, 1)
+                    else:
+                        conv.weight.grad.data = conv.weight.grad.data * conv.keep_mask.view(1, -1, 1, 1)
                 else:
-                    conv.weight.grad.data = conv.weight.grad.data * conv.keep_mask.view(1, -1, 1, 1)
+                    conv.weight.grad = None
                 ratio_ptr -= 1
         else:
-            # If this layer is in bias update list, we update only the biases
-            if i_conv < backward_config['n_bias_update']:
-                conv.weight.grad = None
-            # If this layer is in neither lists, we do not update it at all
-            else:
-                conv.weight.grad = None
-                conv.bias.grad = None
+            conv.weight.grad = None
+            conv.bias.grad = None
     assert n_w_trained == len(backward_config['manual_weight_idx']), \
         (n_w_trained, len(backward_config['manual_weight_idx']))
 
