@@ -121,17 +121,26 @@ def generated_backward_graph(mod, op_idx, method, sparse_bp_config=None, int8_bp
         total_convs = ir_scan_op(mod["main"])["nn.mcuconv2d"]
         # build sparse bp config
         sparse_op_idx = {}
+        # Keep track of biases
+        sparse_bias = []
+        # Ensure that we update the bias of the FC layer - always
+        sparse_bias.append(1)
         for idx, r in zip(
             sparse_bp_config["manual_weight_idx"],
             sparse_bp_config["weight_update_ratio"],
         ):
-            if r <= 0:
+            # Ignore negative ratios
+            if r < 0:
                 continue
-            sparse_op_idx[total_convs - idx] = r
+            # If ratio is non zero, sparse update
+            if r > 0:
+                sparse_op_idx[total_convs - idx] = r
+            # In all cases, update biases
+            sparse_bias.append(total_convs - idx)
 
         def get_sparse_bp_fn():
             tot_bias = sparse_bp_config["n_bias_update"]
-            bias_count = 0
+            bias_itr = 0
             tot_modules = total_convs
 
             def sparse_bp(var, grad_info):
@@ -145,12 +154,15 @@ def generated_backward_graph(mod, op_idx, method, sparse_bp_config=None, int8_bp
                     return False
                 idx = int(vname.split("_")[0].replace("v", ""))
                 # if (op_idx - idx) <= config["n_bias_update"] and "_bias" in vname:
-                nonlocal tot_bias, bias_count
+                nonlocal tot_bias, bias_itr
                 if "_bias" in vname:
-                    bias_count += 1
-                    if (tot_modules - bias_count) <= tot_bias:
+                    # IF this is present in the bias array, then we update the bias
+                    if (tot_modules - bias_itr) in sparse_bias:
+                        bias_itr += 1
                         return True
+                    # If not present in the bias array, look at the next element
                     else:
+                        bias_itr += 1
                         return False
                 if is_sparse and "_weight" in vname:
                     return True
